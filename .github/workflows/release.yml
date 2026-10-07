@@ -38,7 +38,7 @@ jobs:
     env:
       TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG_NAME }}
 
