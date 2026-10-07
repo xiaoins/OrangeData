@@ -124,6 +124,16 @@ async function renderTree() {
   $('#side-hint').textContent = `${state.profiles.length} 个连接 · ${state.open.size} 已打开`;
 }
 
+/* Dead space in the sidebar still must not fall through to the webview's own menu. */
+$('#tree').addEventListener('contextmenu', (e) => {
+  if (e.target.closest('.row')) return;
+  e.preventDefault();
+  menu(e, [
+    { label: '新建连接', run: () => connDialog() },
+    { label: '刷新连接列表', run: () => loadProfiles() },
+  ]);
+});
+
 async function profileNode(p) {
   const node = el('div', { class: 'node' });
   const isOpen = state.open.has(p.id);
@@ -132,17 +142,16 @@ async function profileNode(p) {
     el('span', { class: 'twist', text: isOpen ? '▾' : '▸', onclick: (e) => { e.stopPropagation(); toggleProfile(p, node, kids); } }),
     el('span', { class: 'ico', text: isOpen ? '●' : '○', style: `color:${isOpen ? 'var(--ok)' : 'var(--fg2)'}` }),
     el('span', { class: 'lbl', text: p.name || p.driver, title: p.file || `${p.host}:${p.port}` }),
-    el('span', {
-      class: 'badge', text: state.drivers[p.driver]?.label || p.driver,
-      oncontextmenu: (e) => { e.preventDefault(); profileMenu(p, e); },
-    }),
+    el('span', { class: 'badge', text: state.drivers[p.driver]?.label || p.driver }),
   ]);
-  row.addEventListener('dblclick', () => toggleProfile(p, node, kids));
-  row.addEventListener('click', () => {
+  const select = () => {
     state.selection = { kind: 'profile', connectionId: p.id };
     highlight(row);
-    setCrumbs(`${p.name || p.driver} · ${isOpen ? '已连接' : '未连接'}`);
-  });
+    setCrumbs(`${p.name || p.driver} · ${state.open.has(p.id) ? '已连接' : '未连接'}`);
+  };
+  row.addEventListener('dblclick', () => toggleProfile(p, node, kids));
+  row.addEventListener('click', select);
+  row.addEventListener('contextmenu', (e) => { e.preventDefault(); select(); profileMenu(p, e, node, kids); });
   node.appendChild(row);
   node.appendChild(kids);
   if (isOpen && p._autoExpand) toggleProfile(p, node, kids);
@@ -184,16 +193,36 @@ async function fillProfileKids(p, node, box) {
   for (const d of dbs) box.appendChild(dbNode(p, d));
 }
 
+/* SQLite and MySQL hang tables straight off the database, so the schema-scoped
+   views belong on its row; PostgreSQL lists one row per schema and offers them there. */
+function implicitSchema(p) {
+  return p.driver === 'sqlite' ? { name: 'main' } : p.driver === 'mysql' ? { name: '' } : null;
+}
+
 function dbNode(p, d) {
   const node = el('div', { class: 'node closed' });
   const kids = el('div', { class: 'kids' });
+  const open = () => toggleNode(node, row, () => fillDbKids(p, d, kids));
   const row = el('div', { class: 'row' }, [
     el('span', { class: 'twist', text: '▸' }),
     el('span', { class: 'ico', text: '▤' }),
     el('span', { class: 'lbl', text: d.name }),
     d.comment ? el('span', { class: 'badge', text: d.comment, title: d.comment }) : null,
   ]);
-  row.addEventListener('click', () => toggleNode(node, row, () => fillDbKids(p, d, kids)));
+  row.addEventListener('click', open);
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    state.selection = { kind: 'database', connectionId: p.id, database: d.name };
+    highlight(row);
+    setCrumbs(`${p.name || p.driver} / ${d.name}`);
+    const s = implicitSchema(p);
+    const items = [
+      { label: '刷新', run: () => { if (node.dataset.open === '1') fillDbKids(p, d, kids); else open(); } },
+      { label: '新建 SQL 查询', run: () => openSqlWith('') },
+    ];
+    if (s) items.push({ label: '数据总览', run: () => openDashboard(p, d, s) }, { label: 'ER 关系图', run: () => openMap(p, d, s) }, { label: '新建表', run: () => newTableDialog(p, d, s) });
+    menu(e, items);
+  });
   node.appendChild(row);
   node.appendChild(kids);
   return node;
@@ -219,12 +248,27 @@ async function fillDbKids(p, d, box) {
 function schemaNode(p, d, s) {
   const node = el('div', { class: 'node closed' });
   const kids = el('div', { class: 'kids' });
+  const fill = () => { kids.innerHTML = ''; kids.appendChild(tableListNode(p, d, s)); };
+  const open = () => toggleNode(node, row, fill);
   const row = el('div', { class: 'row' }, [
     el('span', { class: 'twist', text: '▸' }),
     el('span', { class: 'ico', text: '◈' }),
     el('span', { class: 'lbl', text: s.name }),
   ]);
-  row.addEventListener('click', () => { toggleNode(node, row, () => { kids.innerHTML = ''; kids.appendChild(tableListNode(p, d, s)); }); });
+  row.addEventListener('click', open);
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    state.selection = { kind: 'schema', connectionId: p.id, database: d.name, schema: s.name };
+    highlight(row);
+    setCrumbs(`${p.name || p.driver} / ${pathCrumb(p, d, s)}`);
+    menu(e, [
+      { label: '刷新', run: () => { if (node.dataset.open === '1') fill(); else open(); } },
+      { label: '新建 SQL 查询', run: () => openSqlWith('') },
+      { label: '数据总览', run: () => openDashboard(p, d, s) },
+      { label: 'ER 关系图', run: () => openMap(p, d, s) },
+      { label: '新建表', run: () => newTableDialog(p, d, s) },
+    ]);
+  });
   node.appendChild(row);
   node.appendChild(kids);
   return node;
@@ -241,6 +285,12 @@ function toggleNode(node, row, firstOpen) {
 
 function tableListNode(p, d, s) {
   const node = el('div', { class: 'node' });
+  const kids = el('div', { class: 'kids' });
+  const select = () => {
+    state.selection = { kind: 'schema', connectionId: p.id, database: d.name, schema: s.name };
+    highlight(tools);
+    setCrumbs(`${p.name || p.driver} / ${pathCrumb(p, d, s)} · 表`);
+  };
   const tools = el('div', { class: 'row', style: 'color:var(--fg2)' }, [
     el('span', { class: 'twist' }),
     el('span', { class: 'ico', text: '☰' }),
@@ -249,7 +299,17 @@ function tableListNode(p, d, s) {
     el('button', { class: 'mini', title: 'ER 关系图', onclick: (e) => { e.stopPropagation(); openMap(p, d, s); }, text: '关系图' }),
     el('button', { class: 'mini', title: '新建表', onclick: (e) => { e.stopPropagation(); newTableDialog(p, d, s); }, text: '建表' }),
   ]);
-  const kids = el('div', { class: 'kids' });
+  tools.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    select();
+    menu(e, [
+      { label: '刷新', run: () => loadTables(p, d, s, kids) },
+      { label: '新建 SQL 查询', run: () => openSqlWith('') },
+      { label: '数据总览', run: () => openDashboard(p, d, s) },
+      { label: 'ER 关系图', run: () => openMap(p, d, s) },
+      { label: '新建表', run: () => newTableDialog(p, d, s) },
+    ]);
+  });
   node.appendChild(tools);
   node.appendChild(kids);
   loadTables(p, d, s, kids);
@@ -270,12 +330,12 @@ async function loadTables(p, d, s, box) {
       el('span', { class: 'lbl', text: t.name, title: t.comment || '' }),
       t.rowCount != null ? el('span', { class: 'badge', text: String(t.rowCount) }) : null,
     ]);
-    row.addEventListener('click', () => {
+    const select = () => {
       highlight(row);
       state.selection = { kind: 'table', connectionId: p.id, database: d.name, schema: s.name, table: t.name, kind2: t.kind };
-      openTableTab(p, d, s, t);
-    });
-    row.addEventListener('contextmenu', (e) => { e.preventDefault(); tableMenu(p, d, s, t, e); });
+    };
+    row.addEventListener('click', () => { select(); openTableTab(p, d, s, t); });
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); select(); tableMenu(p, d, s, t, e); });
     box.appendChild(row);
   }
 }
@@ -322,10 +382,12 @@ function menu(e, items) {
   setTimeout(() => document.addEventListener('click', off, true), 0);
 }
 
-function profileMenu(p, e) {
+function profileMenu(p, e, node, kids) {
   const isOpen = state.open.has(p.id);
   menu(e, [
     { label: isOpen ? '断开连接' : '连接', run: async () => { if (isOpen) { await call('conn_close', { id: p.id }); state.open.delete(p.id); } else { await call('conn_connect', { cfg: p }); state.open.add(p.id); } renderTree(); } },
+    { label: '刷新', run: () => { if (node.dataset.open === '1') fillProfileKids(p, node, kids); else toggleProfile(p, node, kids); } },
+    { label: '新建 SQL 查询', run: () => openSqlWith('') },
     { label: '编辑', run: () => connDialog(p) },
     { label: '删除', danger: true, run: () => destructive(`删除连接 ${p.name}`, async () => { await call('profile_delete', { id: p.id }); if (isOpen) await call('conn_close', { id: p.id }); await loadProfiles(); }) },
   ]);
