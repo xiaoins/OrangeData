@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OrangeData</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><img class="mark" src="logo.png" width="18" height="18" alt="" />OrangeData</div>
+    <div class="top-actions">
+      <button id="btn-new" class="btn">新建连接</button>
+      <button id="btn-sql" class="btn">SQL 查询</button>
+      <button id="btn-refresh" class="btn ghost">刷新</button>
+    </div>
+    <div class="crumbs" id="crumbs">未连接</div>
+    <button id="btn-theme" class="btn ghost" title="切换深浅主题">◐</button>
+  </header>
+
+  <main class="body">
+    <aside class="side">
+      <div class="side-head">
+        <span>连接</span>
+      </div>
+      <div id="tree" class="tree"></div>
+      <div class="side-foot">
+        <span id="side-hint"></span>
+      </div>
+    </aside>
+
+    <section class="work">
+      <div class="tabs" id="tabs"></div>
+      <div class="pane" id="pane">
+        <div class="welcome">
+          <h2>OrangeData</h2>
+          <p>轻量数据库客户端 · SQLite / MySQL / PostgreSQL</p>
+          <ol>
+            <li>点击左上角<b>新建连接</b>，本地文件选 SQLite，容器或远程选 MySQL / PostgreSQL</li>
+            <li>左侧树展开数据库 → 表，点击表即可浏览与编辑数据</li>
+            <li><b>SQL 查询</b>标签里可执行多语句脚本，结果分页展示</li>
+          </ol>
+        </div>
+      </div>
+      <footer class="status">
+        <span id="status-text">就绪</span>
+        <span id="status-right"></span>
+      </footer>
+    </section>
+  </main>
+</div>
+<div id="modal" class="modal hidden"><div class="modal-card" id="modal-card"></div></div>
+<script src="app.js"></script>
+<script src="grid.js"></script>
+<script src="info.js"></script>
+<script src="sql.js"></script>
+<script src="conn.js"></script>
+</body>
+</html>

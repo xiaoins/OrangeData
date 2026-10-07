@@ -1,0 +1,14 @@
+{
+  "name": "orangedata",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OrangeData - 轻量化可视化数据库客户端 (Tauri 2 + Rust)，支持 MySQL / SQLite / PostgreSQL",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}
