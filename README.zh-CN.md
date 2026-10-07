@@ -15,9 +15,9 @@ English docs: [README.md](README.md)
 
 | 平台 | 产物 |
 | --- | --- |
-| Windows 10/11 (x64) | `OrangeData_x.y.z_x64-setup.exe`（NSIS，当前用户安装） |
-| macOS（Apple Silicon / Intel） | `OrangeData_x.y.z_aarch64.dmg` / `..._x64.dmg` |
-| Linux | `OrangeData_x.y.z_amd64.deb` 与 `.AppImage` |
+| Windows 10/11 (x64) | `*-x64-setup.exe`（NSIS，当前用户安装） |
+| macOS（Apple Silicon / Intel） | `*_aarch64.dmg`、`*_x64.dmg` |
+| Linux (x64) | `*_amd64.deb` 与 `*.AppImage` |
 
 安装包**尚未做代码签名与公证**，首次启动会遇到 Windows SmartScreen（"更多信息 → 仍要运行"）和
 macOS Gatekeeper（`xattr -dr com.apple.quarantine /Applications/OrangeData.app`）。

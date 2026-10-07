@@ -15,9 +15,9 @@ Grab a ready-made installer from the [Releases page](https://github.com/xiaoins/
 
 | Platform | Artifact |
 | --- | --- |
-| Windows 10/11 (x64) | `OrangeData_x.y.z_x64-setup.exe` (NSIS, per-user install) |
-| macOS (Apple Silicon / Intel) | `OrangeData_x.y.z_aarch64.dmg` / `..._x64.dmg` |
-| Linux | `OrangeData_x.y.z_amd64.deb` and `.AppImage` |
+| Windows 10/11 (x64) | `*-x64-setup.exe` (NSIS, per-user install) |
+| macOS (Apple Silicon / Intel) | `*_aarch64.dmg`, `*_x64.dmg` |
+| Linux (x64) | `*_amd64.deb` and `*.AppImage` |
 
 Builds are **not code-signed or notarized** yet. Expect Windows SmartScreen ("More info → Run anyway") and
 macOS Gatekeeper (`xattr -dr com.apple.quarantine /Applications/OrangeData.app`) on first launch.
