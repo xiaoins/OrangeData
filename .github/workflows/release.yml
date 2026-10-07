@@ -1,10 +1,17 @@
 name: Release
 
-# Publish on tag: bump the version, then `git tag vX.Y.Z && git push origin --tags`
+# Publish on tag: bump the version, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+# `tag` below re-runs the build for a tag that already exists, without moving the ref.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -28,8 +35,12 @@ jobs:
             rust-targets: ''
             args: --bundles nsis
     runs-on: ${{ matrix.os }}
+    env:
+      TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG_NAME }}
 
       - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-22.04'
@@ -65,6 +76,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # Required: the action only infers the tag from a `release` event. Left unset on a
+          # tag push it logs "No releaseId or tagName provided, skipping all uploads" and
+          # still exits green, so no release is ever created.
+          tagName: ${{ env.TAG_NAME }}
+          releaseName: ${{ env.TAG_NAME }}
           releaseDraft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.TAG_NAME, '-') }}
           args: ${{ matrix.args }}
