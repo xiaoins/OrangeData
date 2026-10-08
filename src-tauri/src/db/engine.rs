@@ -208,8 +208,10 @@ impl MySqlDb {
             .username(user)
             .password(&cfg.password)
             .ssl_mode(match cfg.ssl.trim().to_lowercase().as_str() {
-                "required" | "true" | "1" => MySqlSslMode::Required,
-                "verify-ca" | "verify_identity" | "verify_identity_required" => MySqlSslMode::VerifyCa,
+                "required" | "require" | "true" | "1" => MySqlSslMode::Required,
+                "preferred" | "prefer" => MySqlSslMode::Preferred,
+                "verify-ca" => MySqlSslMode::VerifyCa,
+                "verify_identity" | "verify_identity_required" | "verify-full" => MySqlSslMode::VerifyIdentity,
                 _ => MySqlSslMode::Disabled,
             });
         if !cfg.database.trim().is_empty() {
@@ -331,9 +333,10 @@ impl PgDb {
             .password(&cfg.password)
             .application_name("OrangeData")
             .ssl_mode(match cfg.ssl.trim().to_lowercase().as_str() {
-                "require" | "true" | "1" => PgSslMode::Require,
-                "prefer" => PgSslMode::Prefer,
-                "verify-ca" | "verify-full" => PgSslMode::VerifyCa,
+                "require" | "required" | "true" | "1" => PgSslMode::Require,
+                "preferred" | "prefer" => PgSslMode::Prefer,
+                "verify-ca" => PgSslMode::VerifyCa,
+                "verify-full" => PgSslMode::VerifyFull,
                 _ => PgSslMode::Disable,
             });
         o = if cfg.database.trim().is_empty() { o.database("postgres") } else { o.database(cfg.database.trim()) };
