@@ -1,4 +1,4 @@
-use super::dialect::{to_dollar, Ctx, Dialect, Sql};
+use super::dialect::{lead_verb, to_dollar, Ctx, Dialect, Sql};
 use super::dialect_sqlite::SqliteDialect;
 use super::mysql_dialect::MySqlDialect;
 use super::pg_dialect::PgDialect;
@@ -58,7 +58,7 @@ where
 /// worksheet `USE <catalog>;` is recognised here and applied by re-pointing the
 /// session at that catalog instead of sending the statement to the server.
 fn use_target(sql: &str) -> Option<String> {
-    let mut words = sql.trim().split_whitespace();
+    let mut words = lead_verb(sql).split_whitespace();
     let verb = words.next()?.to_ascii_lowercase();
     let arg = words.next()?;
     if verb != "use" || words.next().is_some() {

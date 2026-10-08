@@ -184,8 +184,24 @@ pub fn split_statements(sql: &str) -> Vec<String> {
         .collect()
 }
 
+/// Skip leading whitespace and comments so a caller can look at the verb that
+/// actually decides how a statement must be run.
+pub fn lead_verb(sql: &str) -> &str {
+    let mut s = sql.trim_start();
+    loop {
+        let cut = if s.starts_with("--") || s.starts_with('#') {
+            line_comment_len(s)
+        } else if s.starts_with("/*") {
+            block_comment_len(s)
+        } else {
+            return s;
+        };
+        s = s[cut..].trim_start();
+    }
+}
+
 pub fn is_query(sql: &str) -> bool {
-    let s = sql.trim_start().to_lowercase();
+    let s = lead_verb(sql).to_lowercase();
     ["select", "with", "show", "describe", "desc", "explain", "values", "pragma", "table"]
         .iter()
         .any(|p| s.starts_with(p))
