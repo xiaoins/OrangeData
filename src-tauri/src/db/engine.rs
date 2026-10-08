@@ -54,6 +54,20 @@ where
     q
 }
 
+/// MySQL refuses `USE` in the prepared-statement protocol (error 1295), so a
+/// worksheet `USE <catalog>;` is recognised here and applied by re-pointing the
+/// session at that catalog instead of sending the statement to the server.
+fn use_target(sql: &str) -> Option<String> {
+    let mut words = sql.trim().split_whitespace();
+    let verb = words.next()?.to_ascii_lowercase();
+    let arg = words.next()?;
+    if verb != "use" || words.next().is_some() {
+        return None;
+    }
+    let name = arg.trim_end_matches(';').trim_matches('`').trim();
+    (!name.is_empty()).then(|| name.to_string())
+}
+
 pub struct SqliteDb {
     conn: tokio::sync::Mutex<SqliteConnection>,
     /// Attached schema currently browsed; "main" for the opened file.
@@ -262,6 +276,14 @@ impl Db for MySqlDb {
         MySqlDb::read(&mut guard, sql, args).await
     }
     async fn execute(&self, sql: &str, args: &[String]) -> Res<u64> {
+        if args.is_empty() {
+            if let Some(name) = use_target(sql) {
+                let mut want = self.current();
+                want.database = name;
+                // Resolved before the guard exists: set_target locks the connection itself.
+                return self.set_target(&want).await.map(|_| 0);
+            }
+        }
         let mut guard = self.conn.lock().await;
         let r = bind_all(sqlx::query(sql), args).execute(&mut *guard).await.map_err(err)?;
         Ok(r.rows_affected())

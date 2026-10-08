@@ -213,12 +213,17 @@ function dbNode(p, d) {
     el('span', { class: 'lbl', text: d.name }),
     d.comment ? el('span', { class: 'badge', text: d.comment, title: d.comment }) : null,
   ]);
-  row.addEventListener('click', open);
-  row.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
+  // The worksheet takes its catalog from state.selection, so selecting a
+  // database here is what makes an unqualified `SELECT` run against it.
+  const select = () => {
     state.selection = { kind: 'database', connectionId: p.id, database: d.name };
     highlight(row);
     setCrumbs(`${p.name || p.driver} / ${d.name}`);
+  };
+  row.addEventListener('click', () => { select(); open(); });
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    select();
     const s = implicitSchema(p);
     const items = [
       { label: '刷新', run: () => { if (node.dataset.open === '1') fillDbKids(p, d, kids); else open(); } },
@@ -259,12 +264,15 @@ function schemaNode(p, d, s) {
     el('span', { class: 'ico', text: '◈' }),
     el('span', { class: 'lbl', text: s.name }),
   ]);
-  row.addEventListener('click', open);
-  row.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
+  const select = () => {
     state.selection = { kind: 'schema', connectionId: p.id, database: d.name, schema: s.name };
     highlight(row);
     setCrumbs(`${p.name || p.driver} / ${pathCrumb(p, d, s)}`);
+  };
+  row.addEventListener('click', () => { select(); open(); });
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    select();
     menu(e, [
       { label: '刷新', run: () => { if (node.dataset.open === '1') fill(); else open(); } },
       { label: '新建 SQL 查询', run: () => openSqlWith('') },
@@ -359,9 +367,12 @@ function refOf(p, d, s, t) {
   return { connectionId: p.id, database: d.name, schema: s.name, table: t.name };
 }
 function selectStar(p, d, s, t) {
-  const pre = d.name ? `"${d.name}"` : '';
-  const sch = s.name ? `"${s.name}".` : '';
-  return `SELECT * FROM ${pre ? pre + '.' : ''}${sch}"${t.name}" LIMIT 100;`;
+  // MySQL reads a double quote as a string literal, so `"db"."tbl"` is a syntax
+  // error there; only a backtick quotes an identifier.
+  const qq = p.driver === 'mysql' ? (x) => `\`${x}\`` : (x) => `"${x}"`;
+  const parts =
+    p.driver === 'mysql' ? [d.name, t.name] : p.driver === 'sqlite' ? [d.name || 'main', t.name] : [d.name, s.name || 'public', t.name];
+  return `SELECT * FROM ${parts.filter(Boolean).map(qq).join('.')} LIMIT 100;`;
 }
 function refreshTables(p, d, s) {
   const node = [...document.querySelectorAll('.node')].find((n) => n.querySelector('.lbl')?.textContent === (s.name || d.name));
