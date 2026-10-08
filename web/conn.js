@@ -1,6 +1,13 @@
-/* Connection profile editor, Docker discovery picker and table creation dialog. */
+/* Connection profile editor — one form covering local files, Docker containers and remote hosts — plus table creation. */
 
 const DRIVER_LABEL = { sqlite: 'SQLite', mysql: 'MySQL', postgres: 'PostgreSQL' };
+const DEFAULT_HOSTS = /^(127\.|localhost|\[::1\])/i;
+const SOURCE_HINT = {
+  sqlite: '本地文件库：文件不存在时，首次连接会自动创建。',
+  local: '本机服务：填 127.0.0.1 与服务监听端口。',
+  docker: '从运行中的容器回填主机、端口与账号，回填后每一项都可以再改。',
+  remote: '远程服务：填对方主机名或 IP，并确保数据库账号允许该来源登录。',
+};
 const ID_TYPE = { sqlite: 'INTEGER', mysql: 'bigint', postgres: 'bigint' };
 const TYPE_SUGGEST = {
   sqlite: ['INTEGER', 'TEXT', 'REAL', 'NUMERIC', 'BLOB', 'DATE', 'DATETIME'],
@@ -17,6 +24,7 @@ function connDialog(p) {
   const f = {
     name: el('input', { value: src.name || '', placeholder: '我的本地库' }),
     driver: el('select', {}, ['sqlite', 'mysql', 'postgres'].map((v) => el('option', { value: v, text: DRIVER_LABEL[v] }))),
+    source: el('select', {}, [['local', '本机'], ['docker', 'Docker 容器'], ['remote', '远程主机']].map(([v, t]) => el('option', { value: v, text: t }))),
     file: el('input', { value: src.file || '', placeholder: 'D:/data/app.db — 不存在则新建' }),
     host: el('input', { value: src.host || '127.0.0.1', placeholder: '127.0.0.1 或 192.168.x.x' }),
     port: el('input', { value: src.port || 3306, type: 'number', min: '1', max: '65535', style: 'width:100px' }),
@@ -29,6 +37,8 @@ function connDialog(p) {
   };
   f.driver.value = src.driver || 'sqlite';
   f.ssl.value = src.ssl || '';
+  const host = String(src.host || '').trim();
+  f.source.value = src.source || (host && !DEFAULT_HOSTS.test(host) ? 'remote' : 'local');
 
   const pick = el('button', {
     class: 'btn mini', text: '浏览…', onclick: async () => {
@@ -36,6 +46,7 @@ function connDialog(p) {
       if (path) f.file.value = path;
     },
   });
+  const gSource = field('来源', f.source);
   const gFile = el('div', {}, [field('文件', el('div', { style: 'display:flex;gap:6px' }, [f.file, pick]))]);
   const gNet = el('div', {}, [
     field('主机', f.host),
@@ -49,20 +60,113 @@ function connDialog(p) {
     field('字符集', f.charset),
     field('SSL', f.ssl),
   ]);
+  const hint = el('p', { class: 'hint' });
+  const dockerPanel = el('div', { style: 'display:none;margin-bottom:8px' });
+  let dockerState = null;
 
-  const dockerBtn = el('button', { class: 'btn ghost', text: 'Docker 容器', title: '从运行中的容器回填主机、端口与账号', onclick: () => dockerDialog() });
+  function refreshVisibility() {
+    const drv = f.driver.value;
+    const file = drv === 'sqlite';
+    gFile.style.display = file ? '' : 'none';
+    gSource.style.display = file ? 'none' : '';
+    gNet.style.display = file ? 'none' : '';
+    f.schema.parentNode.style.display = drv === 'postgres' ? '' : 'none';
+    f.charset.parentNode.style.display = drv === 'mysql' ? '' : 'none';
+    dockerPanel.style.display = !file && f.source.value === 'docker' ? '' : 'none';
+    hint.textContent = SOURCE_HINT[file ? 'sqlite' : f.source.value];
+  }
+
+  function loadDocker() {
+    dockerPanel.innerHTML = '';
+    dockerPanel.appendChild(el('p', { class: 'hint', text: '正在扫描 docker ps…' }));
+    call('docker_inspect').then((st) => {
+      dockerState = st;
+      renderDocker();
+    }).catch((e) => {
+      dockerPanel.innerHTML = '';
+      dockerPanel.appendChild(el('p', { class: 'err-line', text: String(e) }));
+    });
+  }
+
+  function renderDocker() {
+    const st = dockerState;
+    dockerPanel.innerHTML = '';
+    const rescan = el('button', { class: 'btn mini', text: '重新扫描', onclick: loadDocker });
+    if (!st.installed || !st.reachable) {
+      dockerPanel.appendChild(el('p', { class: 'err-line', text: st.error || (st.installed ? 'Docker 未运行' : '未检测到 docker 命令') }));
+      dockerPanel.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center' }, [
+        el('span', { class: 'hint', text: '启动 Docker Desktop 后重新扫描，或把来源改为本机 / 远程手动填写。' }),
+        rescan,
+      ]));
+      return;
+    }
+    dockerPanel.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:6px' }, [
+      el('span', { class: 'hint', text: `${st.version || 'Docker'} · ${st.containers.length} 个运行中容器` }),
+      el('span', { style: 'flex:1' }),
+      rescan,
+    ]));
+    if (!st.containers.length) {
+      dockerPanel.appendChild(el('p', { class: 'hint', text: '没有运行中的容器。' }));
+      return;
+    }
+    const list = el('div', { style: 'display:flex;flex-direction:column;gap:6px;max-height:210px;overflow:auto' });
+    for (const c of st.containers) {
+      const rows = c.picks.length
+        ? c.picks.map((pk) => el('div', { style: 'display:flex;gap:8px;align-items:center' }, [
+          el('span', { class: 'hint', style: 'width:84px', text: pk.driver || '未知端口' }),
+          el('code', { style: 'font-family:var(--mono);flex:1', text: `${pk.host}:${pk.hostPort} → ${pk.containerPort}` }),
+          el('button', { class: 'btn mini', text: '填入', onclick: () => fillFromPick(c, pk) }),
+        ]))
+        : [el('span', { class: 'hint', text: '无对外映射端口' })];
+      list.appendChild(el('div', { style: 'border:1px solid var(--line);border-radius:8px;padding:6px 8px' }, [
+        el('div', { style: 'display:flex;gap:8px;align-items:center' }, [
+          el('b', { text: c.name }),
+          el('span', { class: 'hint', text: c.image }),
+          el('span', { class: 'badge', text: c.status }),
+        ]),
+        el('div', { style: 'margin-top:6px;display:flex;flex-direction:column;gap:4px' }, rows),
+      ]));
+    }
+    dockerPanel.appendChild(list);
+  }
+
+  // Only a prefill: every field stays editable, so a container that needs a
+  // different password or database is corrected here rather than in a second dialog.
+  function fillFromPick(c, pk) {
+    if (pk.driver && DRIVER_LABEL[pk.driver]) {
+      f.driver.value = pk.driver;
+      refreshVisibility();
+    }
+    f.host.value = pk.host || '127.0.0.1';
+    f.port.value = pk.hostPort;
+    f.user.value = pk.user || (pk.driver === 'postgres' ? 'postgres' : 'root');
+    f.password.value = pk.password || '';
+    f.database.value = pk.database || '';
+    if (!f.name.value.trim()) f.name.value = c.name;
+    status(`已回填 ${c.name} · ${f.host.value}:${f.port.value}`, 'ok');
+  }
 
   function applyDriver() {
     const drv = f.driver.value;
-    gFile.style.display = drv === 'sqlite' ? '' : 'none';
-    gNet.style.display = drv === 'sqlite' ? 'none' : '';
-    dockerBtn.style.display = drv === 'sqlite' ? 'none' : '';
-    f.schema.parentNode.style.display = drv === 'postgres' ? '' : 'none';
-    f.charset.parentNode.style.display = drv === 'mysql' ? '' : 'none';
+    refreshVisibility();
     if (!p || !p.port) f.port.value = state.drivers[drv]?.port || 0;
     if (drv === 'postgres' && !f.user.value) f.user.value = 'postgres';
+    if (drv !== 'sqlite' && f.source.value === 'docker' && !dockerState) loadDocker();
   }
+
+  function applySource() {
+    const cur = f.host.value.trim();
+    if (f.source.value === 'remote') {
+      if (!cur || DEFAULT_HOSTS.test(cur)) f.host.value = '';
+    } else if (!cur || DEFAULT_HOSTS.test(cur)) {
+      f.host.value = '127.0.0.1';
+    }
+    refreshVisibility();
+    if (f.source.value === 'docker' && !dockerState) loadDocker();
+  }
+
   f.driver.addEventListener('change', applyDriver);
+  f.source.addEventListener('change', applySource);
   applyDriver();
 
   function buildCfg() {
@@ -88,10 +192,11 @@ function connDialog(p) {
     el('h3', { text: src.id ? `编辑连接 · ${src.name || src.driver}` : '新建连接' }),
     field('名称', f.name),
     field('类型', f.driver),
+    gSource,
+    dockerPanel,
     gFile, gNet, gDb,
-    el('p', { class: 'hint', text: '本地文件选 SQLite；Docker 容器填 127.0.0.1 + 映射端口；远程填对方主机与端口。' }),
+    hint,
     el('div', { class: 'modal-foot' }, [
-      dockerBtn,
       el('span', { style: 'flex:1' }),
       el('button', { class: 'btn ghost', text: '取消', onclick: closeModal }),
       el('button', {
@@ -129,52 +234,6 @@ async function persistAndConnect(cfg) {
     status(`已连接 ${p.name}`, 'ok');
   } catch (_) { /* conn_connect 已经提示过原因 */ }
   renderTree();
-}
-
-/* ---------------------------------- docker ---------------------------------- */
-
-async function dockerDialog() {
-  const card = el('div', {}, [el('h3', { text: 'Docker 容器' }), el('p', { class: 'hint', text: '正在扫描 docker ps…' })]);
-  showModal(card, 560);
-  let st;
-  try { st = await call('docker_inspect'); } catch (e) { card.innerHTML = ''; card.appendChild(el('p', { class: 'err-line', text: String(e) })); return; }
-  card.innerHTML = '';
-  card.appendChild(el('h3', { text: 'Docker 容器' }));
-  if (!st.installed || !st.reachable) {
-    card.appendChild(el('p', { class: 'err-line', text: st.error || (st.installed ? 'Docker 未运行' : '未检测到 docker 命令') }));
-    card.appendChild(el('p', { class: 'hint', text: '安装并启动 Docker Desktop 后重试；也可以直接手动填写 127.0.0.1 与映射端口。' }));
-    card.appendChild(el('div', { class: 'modal-foot' }, [el('button', { class: 'btn ghost', text: '关闭', onclick: closeModal })]));
-    return;
-  }
-  card.appendChild(el('p', { class: 'hint', text: `${st.version || 'Docker'} · ${st.containers.length} 个运行中容器` }));
-  if (!st.containers.length) {
-    card.appendChild(el('p', { class: 'hint', text: '没有运行中的容器。' }));
-    return;
-  }
-  for (const c of st.containers) {
-    card.appendChild(el('div', { style: 'border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px' }, [
-      el('div', { style: 'display:flex;gap:8px;align-items:center' }, [
-        el('b', { text: c.name }),
-        el('span', { class: 'hint', text: c.image }),
-        el('span', { class: 'badge', text: c.status }),
-      ]),
-      el('div', { style: 'margin-top:6px;display:flex;flex-direction:column;gap:4px' }, c.picks.length ? c.picks.map((pk) => el('div', { style: 'display:flex;gap:8px;align-items:center' }, [
-        el('span', { class: 'hint', style: 'width:96px', text: pk.driver || '未知端口' }),
-        el('code', { style: 'font-family:var(--mono);flex:1', text: `${pk.host}:${pk.hostPort} → ${pk.containerPort}` }),
-        el('button', {
-          class: 'btn mini', text: '用此连接', onclick: () => {
-            closeModal();
-            connDialog({
-              driver: pk.driver || 'mysql', name: c.name, host: pk.host || '127.0.0.1', port: pk.hostPort,
-              user: pk.user || (pk.driver === 'postgres' ? 'postgres' : 'root'), password: pk.password || '',
-              database: pk.database || '', schema: '', file: '', ssl: '', charset: '',
-            });
-          },
-        }),
-      ])) : [el('span', { class: 'hint', text: '无对外映射端口' })]),
-    ]));
-  }
-  card.appendChild(el('div', { class: 'modal-foot' }, [el('button', { class: 'btn ghost', text: '关闭', onclick: closeModal })]));
 }
 
 /* -------------------------------- new table -------------------------------- */
