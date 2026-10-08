@@ -6,6 +6,7 @@ mod db;
 mod docker;
 mod model;
 mod store;
+mod tray;
 
 use commands::AppState;
 use tauri::Manager;
@@ -18,6 +19,7 @@ fn main() {
             let repo = store::Repo::new(dir);
             repo.init();
             app.manage(AppState { registry: db::Registry::default(), repo });
+            tray::install(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
