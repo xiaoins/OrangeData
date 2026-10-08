@@ -82,9 +82,10 @@ body {
 .side-foot { padding: 6px 10px; border-top: 1px solid var(--line); color: var(--fg2); font-size: 11px; }
 
 .node { user-select: none; }
-.node > .row { display: flex; align-items: center; gap: 6px; padding: 3px 10px; cursor: pointer; white-space: nowrap; border-radius: 4px; }
-.node > .row:hover { background: var(--bg3); }
-.node > .row.sel { background: var(--sel); }
+/* Tables hang directly off .kids instead of getting their own .node, so both nestings need styling. */
+.node > .row, .kids > .row { display: flex; align-items: center; gap: 6px; padding: 3px 10px; cursor: pointer; white-space: nowrap; border-radius: 4px; }
+.node > .row:hover, .kids > .row:hover { background: var(--bg3); }
+.node > .row.sel, .kids > .row.sel { background: var(--sel); }
 .node > .kids { margin-left: 14px; }
 .twist { width: 10px; color: var(--fg2); font-size: 10px; }
 .ico { width: 14px; text-align: center; color: var(--fg2); }
