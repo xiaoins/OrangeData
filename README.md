@@ -9,6 +9,19 @@ Speaks **SQLite / MySQL / PostgreSQL** and connects to local files, Docker conta
 
 中文文档：[README.zh-CN.md](README.zh-CN.md)
 
+## Demos
+
+**Connect and re-theme** — create a SQLite or MySQL profile, test it, expand the object tree, open the ER
+diagram, then switch theme: the native titlebar recolours with the in-app palette.
+
+![Connect and theme](assets/demos/connect-and-theme.gif)
+
+**Create, read, update, delete** — run a multi-statement script (`USE` → `CREATE TABLE` → `INSERT`) with one
+result tab per statement, then edit the new table in the grid: page, sort, filter, change cells, append rows,
+and save the whole batch back in a single transaction.
+
+![CRUD in the data grid](assets/demos/crud.gif)
+
 ## Download
 
 Grab a ready-made installer from the [Releases page](https://github.com/xiaoins/OrangeData/releases):
@@ -66,6 +79,7 @@ src-tauri/
   capabilities/        narrow permission set (core + save dialog only, no filesystem scope)
 web/                   index.html + style.css + app/grid/info/sql/conn.js
 assets/app-icon.png    source image for `npx tauri icon`
+assets/demos/*.gif     the two recordings embedded above
 ```
 
 ## Development

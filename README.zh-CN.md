@@ -9,6 +9,18 @@
 
 English docs: [README.md](README.md)
 
+## 演示
+
+**连接与主题切换** —— 新建 SQLite / MySQL 连接、测试连通、展开对象树、打开 ER 关系图，最后切换主题：
+原生标题栏会跟随应用内配色一起变色。
+
+![连接与主题切换](assets/demos/connect-and-theme.gif)
+
+**增删改查** —— 一次执行多语句脚本（`USE` → `CREATE TABLE` → `INSERT`），每条语句独立结果页签；
+随后在数据网格里编辑这张新表：分页、排序、筛选、改单元格、追加行，最后一并事务回写。
+
+![数据网格增删改查](assets/demos/crud.gif)
+
 ## 下载
 
 到 [Releases 页面](https://github.com/xiaoins/OrangeData/releases) 直接下载安装包：
@@ -65,6 +77,7 @@ src-tauri/
   capabilities/        极窄权限（仅 core + 保存对话框，无文件系统 scope）
 web/                   index.html + style.css + app/grid/info/sql/conn.js
 assets/app-icon.png    `npx tauri icon` 的源图
+assets/demos/*.gif     上面内嵌的两段演示录屏
 ```
 
 ## 开发
