@@ -182,7 +182,11 @@ async function fillProfileKids(p, node, box) {
   box.innerHTML = '';
   box.appendChild(el('div', { class: 'hint', style: 'padding:2px 10px', text: '加载中…' }));
   if (!state.open.has(p.id)) {
-    try { await call('conn_connect', { cfg: p }); state.open.add(p.id); markConnected(node, p); } catch (_) { box.innerHTML = ''; return; }
+    try { await call('conn_connect', { cfg: p }); state.open.add(p.id); markConnected(node, p); } catch (e) {
+      box.innerHTML = '';
+      box.appendChild(el('div', { class: 'err-line', text: String(e) }));
+      return;
+    }
   }
   box.innerHTML = '';
   const dbs = await call('meta_databases', { id: p.id });
